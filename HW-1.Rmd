@@ -1,20 +1,23 @@
 ---
 title: "MATH 216 Homework 1"
-author: "WRITE YOUR NAME HERE"
+author: "Trisha Singh"
 output:
   html_document:
-    toc: true
-    toc_float: true
-    collapsed: false
-    smooth_scroll: false
+    collapsed: no
+    smooth_scroll: no
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
 ---
 
-```{r, echo=FALSE, message=FALSE, cache=TRUE}
+```{r, echo=FALSE, message=FALSE}
 library(ggplot2)
 library(dplyr)
 # For read_csv() command, which is an improved version of base R's read.csv()
-library(readr) 
-
+library(readr)
+library(lubridate)
+library(gridExtra)
 # Load data sets. Note this assumes this .Rmd files is in the same directory as
 # the .csv files.
 flights <- read_csv("data/flights.csv") %>% 
@@ -34,11 +37,11 @@ states <- read_csv("data/states.csv")
 
 Please indicate
 
-* Who you collaborated with:
-* Roughly how much time you spent on this HW so far:
+* Who you collaborated with: Yuchen, Connor
+* Roughly how much time you spent on this HW so far: 3-4 hours
 * The URL of the RPubs published URL [here](https://www.nhl.com/).
-* What gave you the most trouble:
-* Any comments you have:
+* What gave you the most trouble: Understand the variables that large datasets contain
+* Any comments you have: My code seems to be too bulky and I would like to make it more compact
 
 
 
@@ -55,12 +58,40 @@ Using this plot, indicate describe the
 [seasonality](https://en.wikipedia.org/wiki/Seasonality) of when delays over 30
 minutes tend to occur.
 
-```{r, echo=FALSE, message=FALSE, fig.width=12, fig.height=6}
+```{r, echo=FALSE, message=FALSE, fig.width=12, fig.height=8}
+
+# Create a categorical variable for delayed flights: =1 if delay > 30, include cancelled flights
+flights <- flights %>% 
+  mutate(delayed=ifelse(dep_delay>30 | cancelled == 1, 1, 0))
+# Find the proportion of flights that were delayed each day
+delayed_flights <- flights %>% 
+  group_by(date) %>% 
+  summarize(prop_delay = mean(delayed))
+#Add the temperature values for each date
+daily_weather <- weather %>% 
+  group_by(date) %>% 
+  summarize("Temperature"=mean(temp))
+delayed_flights_temp <- left_join(delayed_flights, daily_weather, by="date")
+#Plot proportion of flights delayed per day, coloured by daily average temperature
+p_delayed <- ggplot(data=delayed_flights_temp, aes(x=date, y=prop_delay, colour=Temperature)) + geom_point() + geom_smooth()
+#Polishing the graph
+p_delayed +   theme(text = element_text(family="Verdana"), axis.text.x = element_text(angle = 45, hjust = 1), axis.text.y = element_text(face = "bold"), plot.title = element_text(size=20)) +
+  labs(title = "Proportion of Flights Delayed per Day (coloured by temperature)", y = "Proportion of Flights Delayed", x = "Date") +
+  scale_x_date(date_breaks = "1 month",date_labels = "%b %Y")
 
 ```
 
+**Interpretation**
 
+I examined the daily average of flight delays from Jan 2011 to Jan 2012.
+The average flight delay remains almost constant from January to July, then dips till October and then rises again till January. The months from January to July contain many important holidays (New Year, 4th of July etc) and the summer vacations, when people tend to travel a lot. Thus the increased traffic may cause higher delays. 
+I also examined daily delays with respect to temperature and noticed that colder months had higher delays, and warmer months had lower delays, with the exception of April to July (this could be due to increased traffic as mentioned above).
 
+**Notes**
+
+I included cancelled flights when I counted delays over 30 minutes.
+The traffic approach seems more trustworthy than the temperature approach.
+It seems that it would be helpful to remove outliers to observe a clearer trend.
 
 
 ## Question 2:
@@ -68,12 +99,34 @@ minutes tend to occur.
 Some people prefer flying on older planes.  Even though they aren't as nice,
 they tend to have more room.  Which airlines should these people favor?
 
-```{r, echo=FALSE, fig.width=12, fig.height=6}
-
+```{r, echo=FALSE, fig.width=12, fig.height=8}
+# Create a dataset which contains planes dataset merged with flights to get airline
+planes_airline <- inner_join(flights, planes, by = "plane")
+planes_airline <- planes_airline %>% 
+  select(plane, carrier, year)
+planes_airline <- subset(planes_airline, !duplicated(planes_airline$plane))
+#Create variable for age of aircraft (2016 - year)
+planes_airline <- planes_airline %>%
+  mutate(age = 2016-year)
+#Excluding years which are na
+age_by_airline <- planes_airline %>%
+  filter(!is.na(age)) %>% 
+  group_by(carrier) %>% 
+  summarize(avg_age = mean(age))
+#Order plot bars
+age_by_airline$carrier <- factor(age_by_airline$carrier, 
+                                 levels = c("MQ", "AA", "DL", "UA", "US", "WN", "CO", "XE", "EV", "FL", "YV", "OO", "F9", "AS", "B6"))
+#Make plots
+p2 <- ggplot(data = age_by_airline, aes(x=carrier, y=avg_age)) + 
+  geom_bar(stat="identity", colour = "black", fill = "cadetblue2")
+#Polishing the graph
+p2 + theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold"), axis.text.y = element_text(face = "bold"), plot.title = element_text(size=20)) +
+  labs(title = "Average Age of Aircrafts for Each Airline", y = "Average Age of Aircrafts", x = "Airlines")
 ```
 
+**Interpretation**
 
-
+The top five choices for people who prefer older planes are Envoy Air (MQ), American Airlines (AA), Delta Airlines (DL), United Airlines (UA), US Air (US).
 
 
 ## Question 3:
@@ -84,12 +137,65 @@ they tend to have more room.  Which airlines should these people favor?
 For example, Southwest Airlines Flight 60 to Dallas consists of a single flight
 path, but since it flew 299 times in 2013, it would be counted as 299 flights.
 
-```{r, echo=FALSE, message=FALSE, fig.width=12, fig.height=6}
+```{r, echo=FALSE, message=FALSE, fig.width=16, fig.height=8}
+#Ground work: Link destination, state and region
+codes_states_regions <- left_join(airports, states, by="state") %>% 
+  select(iata, state, region)
 
+#Create a subset with only Southwest Airlines flights
+SW <- subset(flights, carrier=="WN")
+
+#Link destination to state, keep only those flights which linked to a state
+SW_state <- left_join(SW, codes_states_regions, by = c("dest"="iata"))
+
+#Flights by state
+flights_by_state <- SW_state %>% 
+  group_by(state) %>% 
+  summarise(n=n()) %>% 
+  mutate(prop=n/sum(n))
+#Flight paths by state
+
+flight_paths <- subset(SW_state, !duplicated(flight))
+flight_paths_by_state <- flight_paths %>% 
+  group_by(state) %>% 
+  summarise(n=n()) %>% 
+  mutate(prop=n/sum(n))
+
+#Try to order bars in bar plot
+flights_by_state$state <- factor(flights_by_state$state, levels = c("TX", "FL", "LA", "CA", "OK", "IL", "NV", "CO", "TN", "AZ", "MO", "MD", "NM", "MS", "AL", "SC", "PA", "NJ", "AR"))
+flight_paths_by_state$state <- factor(flight_paths_by_state$state, levels = c("TX", "FL", "LA", "CA", "OK", "IL", "NV", "CO", "AZ", "TN", "MO", "NM", "MD", "MS", "AL", "SC", "NJ", "PA", "AR"))
+
+#Bar plots
+
+#Plot for flights by state
+p3_1 <- ggplot(flights_by_state, aes(x=state, y=prop)) + 
+  geom_bar(stat="identity", colour = "black", fill = "cadetblue2")
+#polishing the graph
+p3_1 <- p3_1 + ylim(0, 0.4) +
+  theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold", size = 14), axis.text.y = element_text(face = "bold", size = 14), plot.title = element_text(size=20)) +
+  labs(title = "Flights to each State", y = "Proportion of Flights", x = "State")
+
+#Plot for flight paths by state
+p3_2 <- ggplot(flight_paths_by_state, aes(x=state, y=prop)) + 
+  geom_bar(stat="identity", colour = "black", fill = "cadetblue2")
+#polishing the graph
+p3_2 <- p3_2 + ylim(0, 0.4) +
+  theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold", size = 14), axis.text.y = element_text(face = "bold", size = 14), plot.title = element_text(size=20)) +
+  labs(title = "Flight Paths to each State", y = "Proportion of Flight Paths", x = "State")
+
+#arrange both plots together
+grid.arrange(p3_1, p3_2, ncol=2)
 ```
 
+**Interpretation**
 
+The largest proportion of Southwest Airlines flights and flight paths tend to fly to destinations within Texas.
+Texas is followed by Florida, Los Angeles, California, Oakland and so on, though their proportions are less than or equal to 10%.
 
+**Notes**
+
+It is a little concerning that both flights and flight paths show very similar trends for states. I will re-examine my code to make sure I did not make a mistake.
+I was not able to remove the NA bar attached to the end of the bar plot. I do not want to remove NA state values from the dataset since that would change the flight and flight path proportions.
 
 
 ## Question 4:
@@ -99,5 +205,30 @@ carrier flies to/from Houston in the month of July.  Consider the `month()`
 function from the `lubridate` package.
 
 ```{r, echo=FALSE, message=FALSE, fig.width=12, fig.height=6}
+#Create a subset of the flights data: month=July
+july_flights <- flights %>% 
+  filter(month(date)==7)
 
+#Use codes_states_regions to link regions
+july_regions <- left_join(july_flights, codes_states_regions, by=c("dest"="iata")) %>% 
+  group_by(carrier, region) %>% 
+  summarise(flight_freq=n())
+
+#Rename the regions
+july_regions <- july_regions %>% 
+  mutate(region=ifelse(region=="NE", "North-East", ifelse(region=="midwest", "Mid-West", ifelse(region=="south", "South", ifelse(region=="west", "West", NA)))))
+
+#plot
+p4 <- ggplot(july_regions, aes(x=carrier, y=flight_freq, fill=region)) + geom_bar(stat="identity", position="fill")
+#Polishing the graph
+p4 + theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold", size = 14), axis.text.y = element_text(face = "bold", size = 14), plot.title = element_text(size=20)) +
+  labs(title = "Proportion of Regions Flown to/from Houston", y = "Proportion of Flights to/from Houston", x = "Airline")
 ```
+
+**Interpretation**
+
+American Airlines (AA) and AirTran (FL) and Mesa Airlines (YV) have flights to/from Houston solely from the South region. Frontier Airlines (F9) and Alaska Airlines (AS) have flights solely from the West and JetBlue (B6) has flights solely from the North-East. The other airlines have mixed proportions for regions.
+
+**Notes**
+
+I looked at destinations from Houston Airport, but since most flights are round-trip, I assume that these airlines have an equal proportion of flights flying into Houston Airport as well.
