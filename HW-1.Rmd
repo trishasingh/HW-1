@@ -38,7 +38,7 @@ states <- read_csv("data/states.csv")
 Please indicate
 
 * Who you collaborated with: Yuchen, Connor
-* Roughly how much time you spent on this HW so far: 3-4 hours
+* Roughly how much time you spent on this HW so far: 6.5 hours
 * The URL of the RPubs published URL [here](http://rpubs.com/tsingh/hw1).
 * What gave you the most trouble: Understanding the variables that large datasets contain. The glimpse command does not help enough. 
 * Any comments you have: My code seems too bulky and I would like to make it more compact
@@ -89,7 +89,7 @@ p_delayed + theme(text = element_text(family="Verdana"),
                   axis.text.x = element_text(angle = 45, hjust = 1), 
                   axis.text.y = element_text(face = "bold"), 
                   plot.title = element_text(size=20)) +
-  labs(title = "Proportion of Flights Delayed (Delay > 30min) per Day (coloured by temperature)", 
+  labs(title = "Daily Proportion of Flights Delayed (Delay>30min) (coloured by temperature)", 
        y = "Proportion of Flights Delayed", x = "Date") +
   scale_x_date(date_breaks = "1 month",date_labels = "%b %Y")
 
