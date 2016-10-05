@@ -61,22 +61,36 @@ minutes tend to occur.
 ```{r, echo=FALSE, message=FALSE, fig.width=12, fig.height=8}
 
 # Create a categorical variable for delayed flights: =1 if delay > 30, include cancelled flights
-flights <- flights %>% 
-  mutate(delayed=ifelse(dep_delay>30 | cancelled == 1, 1, 0))
-# Find the proportion of flights that were delayed each day
+
 delayed_flights <- flights %>% 
+  mutate(delayed=ifelse(dep_delay>30 | cancelled == 1, 1, 0)) %>% 
   group_by(date) %>% 
-  summarize(prop_delay = mean(delayed))
+  summarize(prop_delay = mean(delayed))        # Find the proportion of flights that were delayed each day
+
 #Add the temperature values for each date
+
 daily_weather <- weather %>% 
   group_by(date) %>% 
   summarize("Temperature"=mean(temp))
+
+#Merging temperature data with flights data
+
 delayed_flights_temp <- left_join(delayed_flights, daily_weather, by="date")
+
 #Plot proportion of flights delayed per day, coloured by daily average temperature
-p_delayed <- ggplot(data=delayed_flights_temp, aes(x=date, y=prop_delay, colour=Temperature)) + geom_point() + geom_smooth()
+
+p_delayed <- ggplot(data=delayed_flights_temp, aes(x=date, y=prop_delay, colour=Temperature)) + 
+  geom_point() + 
+  geom_smooth()
+
 #Polishing the graph
-p_delayed +   theme(text = element_text(family="Verdana"), axis.text.x = element_text(angle = 45, hjust = 1), axis.text.y = element_text(face = "bold"), plot.title = element_text(size=20)) +
-  labs(title = "Proportion of Flights Delayed per Day (coloured by temperature)", y = "Proportion of Flights Delayed", x = "Date") +
+
+p_delayed + theme(text = element_text(family="Verdana"), 
+                  axis.text.x = element_text(angle = 45, hjust = 1), 
+                  axis.text.y = element_text(face = "bold"), 
+                  plot.title = element_text(size=20)) +
+  labs(title = "Proportion of Flights Delayed (Delay > 30min) per Day (coloured by temperature)", 
+       y = "Proportion of Flights Delayed", x = "Date") +
   scale_x_date(date_breaks = "1 month",date_labels = "%b %Y")
 
 ```
@@ -84,13 +98,17 @@ p_delayed +   theme(text = element_text(family="Verdana"), axis.text.x = element
 **Interpretation**
 
 I examined the daily average of flight delays from Jan 2011 to Jan 2012.
+
 The average flight delay remains almost constant from January to July, then dips till October and then rises again till January. The months from January to July contain many important holidays (New Year, 4th of July etc) and the summer vacations, when people tend to travel a lot. Thus the increased traffic may cause higher delays. 
+
 I also examined daily delays with respect to temperature and noticed that colder months had higher delays, and warmer months had lower delays, with the exception of April to July (this could be due to increased traffic as mentioned above).
 
 **Notes**
 
 I included cancelled flights when I counted delays over 30 minutes.
+
 The traffic approach seems more trustworthy than the temperature approach.
+
 It seems that it would be helpful to remove outliers to observe a clearer trend.
 
 
@@ -101,32 +119,43 @@ they tend to have more room.  Which airlines should these people favor?
 
 ```{r, echo=FALSE, fig.width=12, fig.height=8}
 # Create a dataset which contains planes dataset merged with flights to get airline
-planes_airline <- inner_join(flights, planes, by = "plane")
-planes_airline <- planes_airline %>% 
-  select(plane, carrier, year)
-planes_airline <- subset(planes_airline, !duplicated(planes_airline$plane))
-#Create variable for age of aircraft (2016 - year)
-planes_airline <- planes_airline %>%
-  mutate(age = 2016-year)
-#Excluding years which are na
-age_by_airline <- planes_airline %>%
-  filter(!is.na(age)) %>% 
-  group_by(carrier) %>% 
-  summarize(avg_age = mean(age))
-#Order plot bars
-age_by_airline$carrier <- factor(age_by_airline$carrier, 
-                                 levels = c("MQ", "AA", "DL", "UA", "US", "WN", "CO", "XE", "EV", "FL", "YV", "OO", "F9", "AS", "B6"))
+# Contains age of aircraft variable, NA age removed
+
+planes_airline <- inner_join(flights, planes, by = "plane") %>% 
+  select(plane, carrier, year) %>% 
+  distinct(.) %>% 
+  mutate(age = 2016-year) %>%            
+  filter(!is.na(age))                    
+
+#Order box plots
+
+planes_airline$carrier <- factor(planes_airline$carrier, 
+                                 levels = c("MQ", "AA", "DL", "UA", "US", 
+                                            "CO", "WN", "EV", "XE", "FL", 
+                                            "F9", "OO", "YV", "B6", "AS"))
+
 #Make plots
-p2 <- ggplot(data = age_by_airline, aes(x=carrier, y=avg_age)) + 
-  geom_bar(stat="identity", colour = "black", fill = "cadetblue2")
+
+p2 <- ggplot(data = planes_airline, aes(x=carrier, y=age)) + 
+  geom_boxplot(fill="aliceblue") +
+  geom_jitter(color = "darkblue", alpha = 0.3) +
+  theme_light()
+
 #Polishing the graph
+
 p2 + theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold"), axis.text.y = element_text(face = "bold"), plot.title = element_text(size=20)) +
-  labs(title = "Average Age of Aircrafts for Each Airline", y = "Average Age of Aircrafts", x = "Airlines")
+  labs(title = "Boxplots for Age of Aircrafts for Each Airline", y = "Age of Aircrafts", x = "Aircrafts for each Airline")
 ```
 
 **Interpretation**
 
-The top five choices for people who prefer older planes are Envoy Air (MQ), American Airlines (AA), Delta Airlines (DL), United Airlines (UA), US Air (US).
+For people who prefer aircrafts that are more than 20 years old, American Airlines (AA) is the best option since it has a large number of aircrafts and almost all of its aircrafts are older than 20 years. 
+
+Delta Airlines (DL) is also a good option, since its median aircraft age is about 25 years, although there is a lot more variation (both upward and downward) in the age of its aircrafts.
+
+Envoy Air (MQ) is not a good option since it has only two aircrafts.
+
+In the 10-15 year age range, United Airlines (UA), US Air (US), Continental Airlines (CO), ExpressJet (EV) and so on are also good options. Southwest Airlines (WN) has too much variation in aircraft age.
 
 
 ## Question 3:
@@ -139,51 +168,81 @@ path, but since it flew 299 times in 2013, it would be counted as 299 flights.
 
 ```{r, echo=FALSE, message=FALSE, fig.width=16, fig.height=8}
 #Ground work: Link destination, state and region
+
 codes_states_regions <- left_join(airports, states, by="state") %>% 
   select(iata, state, region)
 
 #Create a subset with only Southwest Airlines flights
+
 SW <- subset(flights, carrier=="WN")
 
 #Link destination to state, keep only those flights which linked to a state
+
 SW_state <- left_join(SW, codes_states_regions, by = c("dest"="iata"))
 
 #Flights by state
+
 flights_by_state <- SW_state %>% 
   group_by(state) %>% 
   summarise(n=n()) %>% 
-  mutate(prop=n/sum(n))
+  mutate(prop=n/sum(n)) %>% 
+  filter(!is.na(state))             # state==NA has proportion ~0.01, dropped
+
 #Flight paths by state
 
 flight_paths <- subset(SW_state, !duplicated(flight))
 flight_paths_by_state <- flight_paths %>% 
   group_by(state) %>% 
   summarise(n=n()) %>% 
-  mutate(prop=n/sum(n))
+  mutate(prop=n/sum(n)) %>% 
+  filter(!is.na(state))            #state==NA dropped
 
 #Try to order bars in bar plot
-flights_by_state$state <- factor(flights_by_state$state, levels = c("TX", "FL", "LA", "CA", "OK", "IL", "NV", "CO", "TN", "AZ", "MO", "MD", "NM", "MS", "AL", "SC", "PA", "NJ", "AR"))
-flight_paths_by_state$state <- factor(flight_paths_by_state$state, levels = c("TX", "FL", "LA", "CA", "OK", "IL", "NV", "CO", "AZ", "TN", "MO", "NM", "MD", "MS", "AL", "SC", "NJ", "PA", "AR"))
+
+flights_by_state$state <- factor(flights_by_state$state, levels = c("TX", "FL", "LA", "CA", "OK", 
+                                                                    "IL", "NV", "CO", "TN", "AZ", 
+                                                                    "MO", "MD", "NM", "MS", "AL", 
+                                                                    "SC", "PA", "NJ", "AR"))
+
+flight_paths_by_state$state <- factor(flight_paths_by_state$state, levels = c("TX", "FL", "LA", "CA", "OK", 
+                                                                              "IL", "NV", "CO", "AZ", "TN", 
+                                                                              "MO", "NM", "MD", "MS", "AL", 
+                                                                              "SC", "NJ", "PA", "AR"))
 
 #Bar plots
 
 #Plot for flights by state
+
 p3_1 <- ggplot(flights_by_state, aes(x=state, y=prop)) + 
   geom_bar(stat="identity", colour = "black", fill = "cadetblue2")
+
 #polishing the graph
+
 p3_1 <- p3_1 + ylim(0, 0.4) +
-  theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold", size = 14), axis.text.y = element_text(face = "bold", size = 14), plot.title = element_text(size=20)) +
-  labs(title = "Flights to each State", y = "Proportion of Flights", x = "State")
+  theme(text = element_text(family="Verdana"), 
+        axis.text.x = element_text(face = "bold", size = 14), 
+        axis.text.y = element_text(face = "bold", size = 14), 
+        plot.title = element_text(size=20)) +
+  labs(title = "Flights to each State", 
+       y = "Proportion of Flights", x = "State")
 
 #Plot for flight paths by state
+
 p3_2 <- ggplot(flight_paths_by_state, aes(x=state, y=prop)) + 
   geom_bar(stat="identity", colour = "black", fill = "cadetblue2")
+
 #polishing the graph
+
 p3_2 <- p3_2 + ylim(0, 0.4) +
-  theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold", size = 14), axis.text.y = element_text(face = "bold", size = 14), plot.title = element_text(size=20)) +
-  labs(title = "Flight Paths to each State", y = "Proportion of Flight Paths", x = "State")
+  theme(text = element_text(family="Verdana"), 
+        axis.text.x = element_text(face = "bold", size = 14), 
+        axis.text.y = element_text(face = "bold", size = 14), 
+        plot.title = element_text(size=20)) +
+  labs(title = "Flight Paths to each State", 
+       y = "Proportion of Flight Paths", x = "State")
 
 #arrange both plots together
+
 grid.arrange(p3_1, p3_2, ncol=2)
 ```
 
@@ -192,10 +251,6 @@ grid.arrange(p3_1, p3_2, ncol=2)
 The largest proportion of Southwest Airlines flights and flight paths tend to fly to destinations within Texas.
 Texas is followed by Florida, Los Angeles, California, Oakland and so on, though their proportions are less than or equal to 10%.
 
-**Notes**
-
-It is a little concerning that both flights and flight paths show very similar trends for states. I will re-examine my code to make sure I did not make a mistake.
-I was not able to remove the NA bar attached to the end of the bar plot. I do not want to remove NA state values from the dataset since that would change the flight and flight path proportions.
 
 
 ## Question 4:
@@ -205,24 +260,36 @@ carrier flies to/from Houston in the month of July.  Consider the `month()`
 function from the `lubridate` package.
 
 ```{r, echo=FALSE, message=FALSE, fig.width=12, fig.height=6}
-#Create a subset of the flights data: month=July
-july_flights <- flights %>% 
-  filter(month(date)==7)
+#Create a subset of the flights data: month=July and merge to get regions of the states
 
-#Use codes_states_regions to link regions
-july_regions <- left_join(july_flights, codes_states_regions, by=c("dest"="iata")) %>% 
+july_regions <- flights %>% 
+  filter(month(date)==7) %>% 
+  left_join(., codes_states_regions, by=c("dest"="iata")) %>% 
   group_by(carrier, region) %>% 
   summarise(flight_freq=n())
-
+  
 #Rename the regions
+
 july_regions <- july_regions %>% 
-  mutate(region=ifelse(region=="NE", "North-East", ifelse(region=="midwest", "Mid-West", ifelse(region=="south", "South", ifelse(region=="west", "West", NA)))))
+  mutate(region=ifelse(region=="NE", "North-East", 
+                       ifelse(region=="midwest", "Mid-West", 
+                              ifelse(region=="south", "South", 
+                                     ifelse(region=="west", "West", NA)))))
 
 #plot
-p4 <- ggplot(july_regions, aes(x=carrier, y=flight_freq, fill=region)) + geom_bar(stat="identity", position="fill")
+
+p4 <- ggplot(july_regions, aes(x=carrier, y=flight_freq, fill=region)) + 
+  geom_bar(stat="identity", position="fill")
+
 #Polishing the graph
-p4 + theme(text = element_text(family="Verdana"), axis.text.x = element_text(face = "bold", size = 14), axis.text.y = element_text(face = "bold", size = 14), plot.title = element_text(size=20)) +
-  labs(title = "Proportion of Regions Flown to/from Houston", y = "Proportion of Flights to/from Houston", x = "Airline")
+
+p4 + theme(text = element_text(family="Verdana"), 
+           axis.text.x = element_text(face = "bold", size = 14), 
+           axis.text.y = element_text(face = "bold", size = 14), 
+           plot.title = element_text(size=20)) +
+  labs(title = "Proportion of Regions Flown to/from Houston", 
+       y = "Proportion of Flights to/from Houston", x = "Airline")
+
 ```
 
 **Interpretation**
